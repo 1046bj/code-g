@@ -1,69 +1,83 @@
 from duckduckgo_search import DDGS
-import random
-import asyncio
-from datetime import datetime, timedelta
+import re
+from datetime import datetime
 
-# --- 백업 DB (실제 마감일 정보 포함) ---
-BACKUP_DB = [
-    {"title": "[NIPA] 2026년 AI바우처 지원사업 공고", "agency": "NIPA", "date": "2026-01-20", "deadline": "2026-02-20", "d_day": "D-20", "link": "https://www.nipa.kr", "match_score": 98, "industry": "인공지능(AI)"},
-    {"title": "[K-Startup] 2026년 예비창업패키지 모집", "agency": "창업진흥원", "date": "2026-01-30", "deadline": "2026-02-25", "d_day": "D-25", "link": "https://www.k-startup.go.kr", "match_score": 99, "industry": "창업/초기기업(예비/초기)"},
-    {"title": "[TIPS] 2026년 딥테크 팁스 추천 기업 모집", "agency": "한국엔젤투자협회", "date": "2026-01-15", "deadline": "2026-12-31", "d_day": "상시", "link": "http://www.jointips.or.kr", "match_score": 95, "industry": "딥테크/초격차(DIPS)"},
-]
+# --- [중요] 가짜 데이터(BACKUP_DB) 삭제함 ---
 
 def generate_search_queries(profile):
+    """
+    사용자 프로필을 기반으로 '올해' 실제 공고를 검색할 쿼리를 만듭니다.
+    """
+    current_year = datetime.now().year # 실제 현재 연도(2025)를 가져옴
     queries = []
+    
+    # 산업분야별 검색어 생성
     for ind in profile.industry:
-        if "인공지능" in ind:
-            queries.append(f"2026년 인공지능 지원사업 공고 site:nipa.kr OR site:iitp.kr")
-        elif "창업" in ind:
-            queries.append(f"2026년 예비창업패키지 초기창업패키지 공고 site:k-startup.go.kr")
-        elif "팁스" in ind or "딥테크" in ind:
-            queries.append(f"2026년 팁스 딥테크 지원사업 site:k-startup.go.kr")
-        else:
-            queries.append(f"2026년 {ind.split('(')[0]} 지원사업 site:bizinfo.go.kr")
+        # 검색어 최적화 (정확도를 위해 사이트 지정)
+        clean_ind = ind.split('(')[0] # "인공지능(AI)" -> "인공지능"
+        queries.append(f"{current_year}년 {clean_ind} 지원사업 공고 모집")
+        
+    # 목적별 검색어 추가 (예: 예비창업패키지)
+    if "사업화 자금" in profile.goal:
+        queries.append(f"{current_year}년 예비창업패키지 초기창업패키지 모집 공고")
+    elif "R&D" in profile.goal:
+        queries.append(f"{current_year}년 중소기업 기술개발 지원사업 공고")
             
-    # 검색 정확도를 위해 쿼리 2개만 반환
-    return queries[:2]
+    return queries[:3] # 속도를 위해 최대 3개 쿼리만 실행
+
+def extract_date(text):
+    """
+    검색 요약글(Snippet)에서 날짜 형식(YYYY-MM-DD 또는 MM.DD)을 찾습니다.
+    """
+    # 202x-xx-xx 형식 찾기
+    match = re.search(r'202\d[-.](0[1-9]|1[0-2])[-.](0[1-9]|[12]\d|3[01])', text)
+    if match:
+        return match.group(0)
+    return None
 
 async def search_duckduckgo(query):
     """
-    검색 결과에 '가상의 마감일'을 부여하여 UI 테스트를 돕습니다.
-    (실제 서비스에선 웹페이지 내부 날짜를 파싱해야 하지만, 속도를 위해 시뮬레이션 함)
+    진짜 인터넷 검색 결과만 반환합니다. (가짜 데이터 없음)
     """
     results = []
+    print(f"🕵️ [Real-Search] 검색어: {query}")
+    
     try:
-        print(f"🕵️ [DDG Search] 검색어: {query}")
         with DDGS() as ddgs:
-            ddg_results = list(ddgs.text(query, region='kr-kr', timelimit='m', max_results=4))
+            # region='kr-kr'로 한국 결과 우선 검색
+            ddg_results = list(ddgs.text(query, region='kr-kr', timelimit='w', max_results=5))
             
-        today = datetime.now()
-        
         for r in ddg_results:
-            # 1. 등록일 (랜덤하게 최근 1달 내)
-            reg_days_ago = random.randint(1, 20)
-            reg_date = (today - timedelta(days=reg_days_ago)).strftime("%Y-%m-%d")
+            title = r.get('title', '')
+            link = r.get('href', '')
+            body = r.get('body', '')
             
-            # 2. 마감일 (오늘로부터 1주~4주 뒤)
-            due_days = random.randint(5, 30)
-            due_date = (today + timedelta(days=due_days)).strftime("%Y-%m-%d")
-            
-            # 3. D-Day 계산
-            d_day_str = f"D-{due_days}"
+            # 본문에서 날짜 추정 (없으면 '상세확인')
+            found_date = extract_date(body)
+            deadline_str = found_date if found_date else "공고문 확인"
+            d_day_str = "D-??" # 정확한 마감일은 상세페이지에만 있어서 물음표 처리
 
+            # 기관명 추정 (제목 앞부분이나 도메인으로 유추)
+            agency = "정부공고"
+            if "k-startup" in link: agency = "K-Startup"
+            elif "nipa" in link: agency = "NIPA"
+            elif "kaist" in link: agency = "KAIST"
+            
             results.append({
-                "title": r['title'],
-                "agency": "Web Search", 
-                "date": reg_date,       # 등록일
-                "deadline": due_date,   # 마감일
-                "d_day": d_day_str,     # D-Day
-                "link": r['href'],
-                "match_score": random.randint(70, 98),
-                "summary": r['body'][:100] + "..."
+                "title": title,
+                "agency": agency, 
+                "date": datetime.now().strftime("%Y-%m-%d"), # 검색 시점
+                "deadline": deadline_str,
+                "d_day": d_day_str,
+                "link": link,
+                "match_score": 80, # 기본 점수
+                "summary": body
             })
-        return results
+            
     except Exception as e:
-        print(f"❌ DDG 검색 에러: {e}")
-        return []
+        print(f"❌ 검색 오류: {e}")
+        
+    return results
 
 async def get_notices(profile):
     queries = generate_search_queries(profile)
@@ -73,12 +87,8 @@ async def get_notices(profile):
         res = await search_duckduckgo(q)
         all_results.extend(res)
         
-    # 결과 부족 시 백업 사용
-    if len(all_results) < 2:
-        all_results.extend(BACKUP_DB)
-
+    # 중복 제거 (링크 기준)
     unique_results = {v['link']: v for v in all_results}.values()
     final_list = list(unique_results)
-    final_list.sort(key=lambda x: x['match_score'], reverse=True)
     
-    return final_list[:15]
+    return final_list
