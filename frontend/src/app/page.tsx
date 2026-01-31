@@ -67,7 +67,7 @@ export default function Home() {
         alert("산업 분야를 최소 1개 이상 선택해주세요.");
         setLoading(false); return;
       }
-      const res = await fetch(`http://127.0.0.1:8000/api/code-g/analyze`, {
+      const res = await fetch(`https://code-g-backend.onrender.com/api/code-g/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
@@ -89,7 +89,7 @@ export default function Home() {
     setSummaryData(null); // 이전 데이터 초기화
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/code-g/summarize`, {
+      const res = await fetch(`https://code-g-backend.onrender.com/api/code-g/summarize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: notice.link, title: notice.title }),
