@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --code-g-bg: #0a0a0f;
+  --code-g-surface: #12121a;
+  --code-g-border: #1e1e2e;
+  --code-g-accent: #00d26a;
+  --code-g-text: #e5e7eb;
+  --code-g-muted: #6b7280;
+}
+
+body {
+  background: var(--code-g-bg);
+  color: var(--code-g-text);
+  min-height: 100vh;
+}
+
+/* Subtle grid background for tech feel */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(0, 210, 106, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 210, 106, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.g-score-high {
+  @apply text-code-g-accent shadow-glow;
+}
+.g-score-mid {
+  @apply text-amber-400;
+}
+.g-score-low {
+  @apply text-code-g-muted;
+}
