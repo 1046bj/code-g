@@ -1,48 +1,51 @@
-import httpx
+import requests
 from bs4 import BeautifulSoup
-import os
+import time
 
-async def analyze_content(url: str, title: str):
-    """
-    공고 URL에 접속하여 본문을 긁어온 뒤, 핵심 내용을 요약합니다.
-    """
-    print(f"🧠 [AI Analyzer] 분석 시작: {title}")
+# =========================================================
+# 안전한 분석기 (에러 방지 기능 포함)
+# =========================================================
+def analyze_content(url, title):
+    print(f"⚡ [Analyzer] 분석 시작: {title}")
+    print(f"    🔗 URL: {url}")
     
-    # 1. 웹페이지 본문 긁어오기
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # 1. URL이 없으면 바로 종료
+    if not url or url == '-':
+        return {"summary": "❌ 분석할 URL 정보가 없습니다."}
+
     try:
-        async with httpx.AsyncClient(verify=False, timeout=5.0, headers=headers) as client:
-            response = await client.get(url)
-            soup = BeautifulSoup(response.text, 'html.parser')
+        # 2. 웹페이지 내용 긁어오기 (크롤링)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        # 3. 텍스트만 추출
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 스크립트, 스타일 태그 제거 (깔끔하게)
+        for script in soup(["script", "style"]):
+            script.decompose()
             
-            # 본문 텍스트 추출
-            body_text = soup.get_text(separator=' ', strip=True)[:3000]
-            
+        text = soup.get_text()
+        
+        # 공백 정리
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        clean_text = '\n'.join(chunk for chunk in chunks if chunk)
+        
+        # 4. 요약 만들기 (AI 없이도 동작하도록)
+        # 본문 앞부분 300자를 가져와서 요약처럼 보여줌
+        summary_text = clean_text[:400]
+        
+        if len(summary_text) < 50:
+            final_summary = "🔒 보안으로 보호된 사이트이거나 내용이 이미지로 되어 있어 텍스트를 가져올 수 없습니다. 원본 링크를 확인해주세요."
+        else:
+            final_summary = f"🔍 [자동 추출 요약]\n\n{summary_text}...\n\n(더 자세한 내용은 원본 공고를 참고하세요)"
+
+        print("✅ 분석 완료!")
+        return {"summary": final_summary}
+
     except Exception as e:
-        print(f"❌ 접속 실패: {e}")
-        body_text = "본문 내용을 가져올 수 없습니다. 링크를 직접 확인해주세요."
-
-    # 2. AI 분석 (Rule-based 시뮬레이션)
-    analysis_result = {
-        "summary": "해당 공고는 기술력을 보유한 기업을 대상으로 자금 및 사업화를 지원하는 프로그램입니다.",
-        "eligibility": "업력 7년 이내 창업기업 또는 R&D 역량 보유 중소기업",
-        "funding": "과제당 최대 1억 ~ 5억원 내외 (자부담 10%~20%)",
-        "deadline": "공고문 내 마감일 확인 필수 (보통 2~3주 내 마감)",
-        "strategy": "사업계획서의 '기술의 차별성'과 '시장 진입 전략'을 강조하는 것이 선정 확률을 높입니다."
-    }
-
-    # 키워드 기반 맞춤형 요약
-    if "바우처" in title:
-        analysis_result["summary"] = "AI/데이터 솔루션 도입 비용을 바우처 형태로 지원하는 사업입니다."
-        analysis_result["funding"] = "최대 3억원 (바우처 지급)"
-    elif "R&D" in title or "기술개발" in title:
-        analysis_result["summary"] = "신기술 개발 및 시제품 제작을 위한 연구개발비(R&D) 지원 사업입니다."
-        analysis_result["eligibility"] = "기업부설연구소 또는 전담부서 보유 기업 우대"
-    elif "창업" in title or "패키지" in title:
-        analysis_result["summary"] = "초기 창업기업의 사업화 자금, 멘토링, 입주공간을 패키지로 지원합니다."
-        analysis_result["strategy"] = "대표자의 역량과 팀 빌딩, 초기 시장 검증 결과가 평가의 핵심입니다."
-    elif "팁스" in title or "TIPS" in title:
-        analysis_result["summary"] = "민간 투자사가 먼저 투자한 유망 스타트업에 정부가 R&D 자금을 매칭 지원합니다."
-        analysis_result["funding"] = "R&D 최대 5억 + 사업화/마케팅 추가 지원"
-
-    return analysis_result
+        print(f"💥 분석 중 에러 발생: {e}")
+        return {"summary": f"⚠️ 분석 실패: 웹사이트 접속이 차단되었거나 주소가 올바르지 않습니다. ({str(e)})"}
